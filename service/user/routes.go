@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/mux"
+	"github.com/uzimasam/rasta/config"
 	"github.com/uzimasam/rasta/service/auth"
 	"github.com/uzimasam/rasta/types"
 	"github.com/uzimasam/rasta/utils"
@@ -25,6 +26,39 @@ func (h *Handler) RegisterRoutes(router *mux.Router) {
 }
 
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
+	// get json payload
+	var payload types.LoginUserPayload
+	if err := utils.ParseJson(r, &payload); err != nil {
+		utils.WriteError(w, http.StatusBadRequest, err)
+		return
+	}
+
+	// validate the payload
+	if err := utils.Validate.Struct(payload); err != nil {
+		errors := err.(validator.ValidationErrors)
+		utils.WriteError(w, http.StatusBadRequest, fmt.Errorf("invalid payload %v", errors))
+		return
+	}
+
+	// check if user exists
+	u, err := h.store.GetUserByEmail(payload.Email)
+	if err != nil {
+		utils.WriteError(w, http.StatusNotFound, fmt.Errorf("Invalid email or password."))
+		return
+	}
+
+	if !auth.CheckPasswordHash(u.Password, []byte(payload.Password)) {
+		utils.WriteError(w, http.StatusNotFound, fmt.Errorf("Invalid email or password"))
+		return
+	}
+
+	secret := []byte(config.Envs.JWTSecret)
+	token, err := auth.CreateJWT(secret, u.ID)
+	if err != nil {
+		utils.WriteError(w, http.StatusInternalServerError, fmt.Errorf("Internal Server Error"))
+	}
+
+	utils.WriteJson(w, http.StatusOK, map[string]string{"message": "Login successful", "token": token})
 }
 
 func (h *Handler) handleRegister(w http.ResponseWriter, r *http.Request) {
