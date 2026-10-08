@@ -3,6 +3,7 @@ package product
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/uzimasam/rasta/types"
 )
@@ -49,6 +50,32 @@ func (s *Store) GetProductByID(id int) (*types.Product, error) {
 		return nil, fmt.Errorf("Product Not Found")
 	}
 	return p, nil
+}
+
+func (s *Store) GetProductsByIDs(ids []int) ([]types.Product, error) {
+	placeholders := strings.Repeat(",?", len(ids)-1)
+	query := fmt.Sprintf("SELECT * FROM products WHERE id IN (?%s)", placeholders)
+
+	// convert the product ids into interface
+	args := make([]interface{}, len(ids))
+	for i, v := range ids {
+		args[i] = v
+	}
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	products := make([]types.Product, 0)
+	for rows.Next() {
+		p, err := scanRowIntoProduct(rows)
+		if err != nil {
+			return nil, err
+		}
+		products = append(products, *p)
+	}
+	return products, nil
 }
 
 func (s *Store) CreateProduct(p types.Product) error {
